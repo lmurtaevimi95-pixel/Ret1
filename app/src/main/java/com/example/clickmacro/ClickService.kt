@@ -30,6 +30,7 @@ class ClickService : AccessibilityService() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
+    private val floating by lazy { FloatingButtons(this) }
     private var windowManager: WindowManager? = null
     private var overlay: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
@@ -51,6 +52,7 @@ class ClickService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        floating.refresh()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -59,8 +61,14 @@ class ClickService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         stopEverything()
+        floating.removeAll()
         instance = null
         return super.onUnbind(intent)
+    }
+
+    // Обновить плавающие кнопки после изменения настроек
+    fun refreshFloating() {
+        floating.refresh()
     }
 
     // ---------- Запись ----------
@@ -68,6 +76,7 @@ class ClickService : AccessibilityService() {
     fun startRecording(name: String) {
         if (recording || playing) return
         recording = true
+        floating.removeAll()
         recName = name
         recSteps.clear()
         lastEventTime = System.currentTimeMillis()
@@ -96,7 +105,10 @@ class ClickService : AccessibilityService() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         )
-        if (!addOverlay(root, lp)) recording = false
+        if (!addOverlay(root, lp)) {
+            recording = false
+            floating.refresh()
+        }
     }
 
     private fun onRecordTouch(e: MotionEvent) {
@@ -136,6 +148,7 @@ class ClickService : AccessibilityService() {
         if (!recording) return
         recording = false
         removeOverlay()
+        floating.refresh()
         if (recSteps.isEmpty()) {
             toast("Действий нет — макрос не сохранён")
             return
@@ -153,8 +166,8 @@ class ClickService : AccessibilityService() {
         playing = true
         val token = ++playToken
         showStopButton()
-        toast("Старт через 3 секунды")
-        handler.postDelayed({ runStep(macro, 0, 0, token) }, 3000)
+        floating.setTouchable(false)
+        handler.postDelayed({ runStep(macro, 0, 0, token) }, 100)
     }
 
     private fun runStep(m: Macro, index: Int, round: Int, token: Int) {
@@ -185,6 +198,7 @@ class ClickService : AccessibilityService() {
         playToken++
         handler.removeCallbacksAndMessages(null)
         removeOverlay()
+        floating.setTouchable(true)
         toast(message)
     }
 
