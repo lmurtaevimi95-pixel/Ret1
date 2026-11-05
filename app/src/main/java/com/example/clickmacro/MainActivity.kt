@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.util.Locale
 
 private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -151,7 +152,8 @@ class MainActivity : Activity() {
         val hint = TextView(this)
         hint.text = "1. Включите сервис ClickMacro в специальных возможностях.\n" +
             "2. Нажмите «Добавить макрос», выполните нажатия и нажмите «Стоп и сохранить».\n" +
-            "3. Запускайте макрос из списка кнопкой ▶."
+            "3. Запускайте макрос из списка кнопкой ▶.\n" +
+            "4. Нажмите на макрос, чтобы изменить повторы и паузы."
         hint.setTextColor(COLOR_MUTED)
         hint.textSize = 14f
         hint.setPadding(dp(10), dp(16), dp(10), 0)
@@ -265,7 +267,14 @@ class MainActivity : Activity() {
 
     private fun macroMenu(m: Macro, list: MutableList<Macro>) {
         val rep = if (m.repeat == 0) "∞" else m.repeat.toString()
-        val items = arrayOf("▶ Запустить", "🔁 Повторов: $rep", "✏️ Переименовать", "🗑 Удалить")
+        val items = arrayOf(
+            "▶ Запустить",
+            "🔁 Повторов: $rep",
+            "⏱ Пауза для всех действий",
+            "📝 Пауза по действиям",
+            "✏️ Переименовать",
+            "🗑 Удалить"
+        )
         AlertDialog.Builder(this)
             .setTitle(m.name)
             .setItems(items) { _, which ->
@@ -276,14 +285,16 @@ class MainActivity : Activity() {
                         MacroStore.save(this, list)
                         show(1)
                     }
-                    2 -> askText("Название", m.name, false) { v ->
+                    2 -> setAllDelays(m, list)
+                    3 -> editSteps(m, list)
+                    4 -> askText("Название", m.name, false) { v ->
                         if (v.isNotBlank()) {
                             m.name = v.trim()
                             MacroStore.save(this, list)
                             show(1)
                         }
                     }
-                    3 -> confirmDelete(m, list)
+                    5 -> confirmDelete(m, list)
                 }
             }
             .show()
@@ -298,6 +309,60 @@ class MainActivity : Activity() {
                 show(1)
             }
             .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    // ---------- Паузы между действиями ----------
+
+    // Пауза в секундах -> миллисекунды в диапазоне 0.100–1.000
+    private fun parseDelayMs(text: String): Long? {
+        val v = text.trim().replace(',', '.').toDoubleOrNull() ?: return null
+        return Math.round(v * 1000.0).coerceIn(100L, 1000L)
+    }
+
+    private fun fmtSec(ms: Long): String = String.format(Locale.US, "%.3f", ms / 1000.0)
+
+    private fun setAllDelays(m: Macro, list: MutableList<Macro>) {
+        askText("Пауза между всеми действиями, сек (0.100–1.000)", "0.300", true, true) { v ->
+            val ms = parseDelayMs(v)
+            if (ms == null) {
+                toast("Введите число, например 0.250")
+            } else {
+                for (s in m.steps) s.delay = ms
+                MacroStore.save(this, list)
+                toast("Пауза для всех действий: ${fmtSec(ms)} с")
+                show(1)
+            }
+        }
+    }
+
+    private fun editSteps(m: Macro, list: MutableList<Macro>) {
+        val items = Array(m.steps.size) { i ->
+            val s = m.steps[i]
+            val kind = if (s.x1 == s.x2 && s.y1 == s.y2) "касание" else "свайп"
+            "${i + 1}. $kind, пауза ${fmtSec(s.delay)} с"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Действия: ${m.name}")
+            .setItems(items) { _, i ->
+                val step = m.steps[i]
+                askText(
+                    "Пауза перед действием ${i + 1}, сек (0.100–1.000)",
+                    fmtSec(step.delay.coerceIn(100L, 1000L)),
+                    true,
+                    true
+                ) { v ->
+                    val ms = parseDelayMs(v)
+                    if (ms == null) {
+                        toast("Введите число, например 0.250")
+                    } else {
+                        step.delay = ms
+                        MacroStore.save(this, list)
+                        editSteps(m, list)
+                    }
+                }
+            }
+            .setNegativeButton("Закрыть", null)
             .show()
     }
 
@@ -316,160 +381,3 @@ class MainActivity : Activity() {
                 this,
                 "Запись идёт: делайте нажатия, затем «Стоп и сохранить» сверху",
                 Toast.LENGTH_LONG
-            ).show()
-            moveTaskToBack(true)
-        }
-    }
-
-    private fun startMacro(m: Macro) {
-        val svc = ClickService.instance
-        if (svc == null) {
-            needService()
-            return
-        }
-        svc.play(m)
-        moveTaskToBack(true)
-    }
-
-    private fun needService() {
-        AlertDialog.Builder(this)
-            .setTitle("Сервис выключен")
-            .setMessage(
-                "Включите «ClickMacro» в Настройки → Специальные возможности. " +
-                    "Без него нельзя записывать и выполнять нажатия."
-            )
-            .setPositiveButton("Открыть настройки") { _, _ -> openAccessibility() }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    private fun openAccessibility() {
-        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-    }
-
-    // ---------- Экспорт и импорт ----------
-
-    private fun exportMacros() {
-        val list = MacroStore.load(this)
-        if (list.isEmpty()) {
-            toast("Пока нечего экспортировать")
-            return
-        }
-        pickMacros("Что экспортировать?", "Сохранить файл", list) { chosen ->
-            pendingExport = chosen
-            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
-            intent.addCategory(Intent.CATEGORY_OPENABLE)
-            intent.type = "application/json"
-            intent.putExtra(Intent.EXTRA_TITLE, "clickmacro-macros.json")
-            startActivityForResult(intent, REQ_EXPORT)
-        }
-    }
-
-    private fun importMacros() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-        intent.addCategory(Intent.CATEGORY_OPENABLE)
-        intent.type = "*/*"
-        startActivityForResult(intent, REQ_IMPORT)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        when (requestCode) {
-            REQ_EXPORT -> writeExport(uri)
-            REQ_IMPORT -> readImport(uri)
-        }
-    }
-
-    private fun writeExport(uri: Uri) {
-        try {
-            val json = MacroStore.toJson(pendingExport)
-            contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-            toast("Экспортировано макросов: ${pendingExport.size}")
-        } catch (e: Exception) {
-            toast("Не удалось сохранить файл")
-        }
-    }
-
-    private fun readImport(uri: Uri) {
-        val found: List<Macro> = try {
-            val text = contentResolver.openInputStream(uri)?.use {
-                it.readBytes().toString(Charsets.UTF_8)
-            } ?: ""
-            MacroStore.fromJson(text)
-        } catch (e: Exception) {
-            emptyList()
-        }
-        if (found.isEmpty()) {
-            toast("В файле нет макросов ClickMacro")
-            return
-        }
-        pickMacros("Что импортировать?", "Импортировать", found) { chosen ->
-            val all = MacroStore.load(this)
-            var nextId = System.currentTimeMillis()
-            for (m in chosen) {
-                all.add(m.copy(id = nextId))
-                nextId++
-            }
-            MacroStore.save(this, all)
-            toast("Импортировано макросов: ${chosen.size}")
-            show(1)
-        }
-    }
-
-    // Диалог с галочками: все макросы выбраны, лишние можно снять
-    private fun pickMacros(
-        title: String,
-        positive: String,
-        items: List<Macro>,
-        onOk: (List<Macro>) -> Unit
-    ) {
-        val names = Array(items.size) { i -> "${items[i].name} (${items[i].steps.size} действий)" }
-        val checked = BooleanArray(items.size) { true }
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMultiChoiceItems(names, checked) { _, which, isChecked ->
-                checked[which] = isChecked
-            }
-            .setPositiveButton(positive) { _, _ ->
-                val chosen = items.filterIndexed { i, _ -> checked[i] }
-                if (chosen.isEmpty()) toast("Ничего не выбрано") else onOk(chosen)
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    // ---------- Мелочи ----------
-
-    private fun askText(title: String, initial: String, numeric: Boolean, onOk: (String) -> Unit) {
-        val input = EditText(this)
-        input.setText(initial)
-        input.setSelection(input.text.length)
-        if (numeric) input.inputType = InputType.TYPE_CLASS_NUMBER
-
-        val box = FrameLayout(this)
-        box.setPadding(dp(20), dp(8), dp(20), 0)
-        box.addView(input)
-
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(box)
-            .setPositiveButton("OK") { _, _ -> onOk(input.text.toString()) }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
-        val d = GradientDrawable()
-        d.setColor(color)
-        d.cornerRadius = dp(radiusDp).toFloat()
-        return d
-    }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-
-    private fun toast(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-    }
-}
