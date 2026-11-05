@@ -1,0 +1,475 @@
+package com.example.clickmacro
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Bundle
+import android.provider.Settings
+import android.text.InputType
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+
+private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
+private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
+private const val REQ_EXPORT = 1
+private const val REQ_IMPORT = 2
+
+private val COLOR_BG = Color.parseColor("#16213A")
+private val COLOR_HEADER = Color.parseColor("#1F2D52")
+private val COLOR_NAV = Color.parseColor("#0F1830")
+private val COLOR_CARD = Color.parseColor("#24345E")
+private val COLOR_ACCENT = Color.parseColor("#6EA8FF")
+private val COLOR_MUTED = Color.parseColor("#8E9BB8")
+
+class MainActivity : Activity() {
+
+    private lateinit var content: FrameLayout
+    private lateinit var statusView: TextView
+    private lateinit var navHome: TextView
+    private lateinit var navMacros: TextView
+    private var tab = 0
+    private var pendingExport: List<Macro> = emptyList()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.statusBarColor = COLOR_HEADER
+        window.navigationBarColor = COLOR_NAV
+
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(COLOR_BG)
+
+        root.addView(buildHeader())
+        content = FrameLayout(this)
+        root.addView(content, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        root.addView(buildNav())
+
+        setContentView(root)
+        show(0)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        show(tab)
+    }
+
+    // ---------- Каркас: шапка и нижнее меню ----------
+
+    private fun buildHeader(): View {
+        val h = LinearLayout(this)
+        h.orientation = LinearLayout.HORIZONTAL
+        h.gravity = Gravity.CENTER_VERTICAL
+        h.setBackgroundColor(COLOR_HEADER)
+        h.setPadding(dp(20), dp(16), dp(20), dp(16))
+
+        val title = TextView(this)
+        title.text = "ClickMacro"
+        title.setTextColor(Color.WHITE)
+        title.textSize = 22f
+        title.typeface = Typeface.DEFAULT_BOLD
+        h.addView(title, LinearLayout.LayoutParams(0, WRAP, 1f))
+
+        statusView = TextView(this)
+        statusView.textSize = 14f
+        h.addView(statusView)
+        return h
+    }
+
+    private fun buildNav(): View {
+        val nav = LinearLayout(this)
+        nav.orientation = LinearLayout.HORIZONTAL
+        nav.setBackgroundColor(COLOR_NAV)
+        navHome = navItem("🏠\nГлавная", 0)
+        navMacros = navItem("📋\nМакросы", 1)
+        nav.addView(navHome, LinearLayout.LayoutParams(0, WRAP, 1f))
+        nav.addView(navMacros, LinearLayout.LayoutParams(0, WRAP, 1f))
+        return nav
+    }
+
+    private fun navItem(label: String, index: Int): TextView {
+        val t = TextView(this)
+        t.text = label
+        t.gravity = Gravity.CENTER
+        t.textSize = 13f
+        t.setPadding(0, dp(10), 0, dp(10))
+        t.setOnClickListener { show(index) }
+        return t
+    }
+
+    private fun show(t: Int) {
+        tab = t
+        content.removeAllViews()
+        content.addView(if (t == 0) homeView() else macrosView())
+        navHome.setTextColor(if (t == 0) COLOR_ACCENT else COLOR_MUTED)
+        navMacros.setTextColor(if (t == 1) COLOR_ACCENT else COLOR_MUTED)
+        refreshStatus()
+    }
+
+    private fun refreshStatus() {
+        val on = ClickService.instance != null
+        statusView.text = if (on) "● Включено" else "● Выключено"
+        statusView.setTextColor(if (on) Color.parseColor("#4CAF50") else Color.parseColor("#FF7043"))
+    }
+
+    // ---------- Главная: плитки ----------
+
+    private fun homeView(): View {
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(dp(10), dp(10), dp(10), dp(10))
+
+        col.addView(
+            tileRow(
+                tile("➕", "Добавить макрос", "#3F6FD9") { addMacro() },
+                tile("📋", "Мои макросы", "#2E9D6B") { show(1) }
+            )
+        )
+        col.addView(
+            tileRow(
+                tile("📤", "Экспорт", "#8E3B6E") { exportMacros() },
+                tile("📥", "Импорт", "#2A8CA8") { importMacros() }
+            )
+        )
+        col.addView(
+            tileRow(
+                tile("⚙️", "Включить сервис", "#E07B2A") { openAccessibility() },
+                tile("⏹", "Остановить макрос", "#D64545") { ClickService.instance?.stopPlayback() }
+            )
+        )
+
+        val hint = TextView(this)
+        hint.text = "1. Включите сервис ClickMacro в специальных возможностях.\n" +
+            "2. Нажмите «Добавить макрос», выполните нажатия и нажмите «Стоп и сохранить».\n" +
+            "3. Запускайте макрос из списка кнопкой ▶."
+        hint.setTextColor(COLOR_MUTED)
+        hint.textSize = 14f
+        hint.setPadding(dp(10), dp(16), dp(10), 0)
+        col.addView(hint)
+
+        val sv = ScrollView(this)
+        sv.addView(col)
+        return sv
+    }
+
+    private fun tile(icon: String, label: String, color: String, onClick: () -> Unit): View {
+        val t = LinearLayout(this)
+        t.orientation = LinearLayout.VERTICAL
+        t.gravity = Gravity.CENTER
+        t.background = rounded(Color.parseColor(color), 24)
+        t.setOnClickListener { onClick() }
+
+        val i = TextView(this)
+        i.text = icon
+        i.textSize = 32f
+        i.gravity = Gravity.CENTER
+        t.addView(i)
+
+        val l = TextView(this)
+        l.text = label
+        l.setTextColor(Color.WHITE)
+        l.textSize = 15f
+        l.gravity = Gravity.CENTER
+        l.setPadding(dp(8), dp(8), dp(8), 0)
+        t.addView(l)
+        return t
+    }
+
+    private fun tileRow(a: View, b: View): View {
+        val r = LinearLayout(this)
+        r.orientation = LinearLayout.HORIZONTAL
+        r.addView(a, cellParams())
+        r.addView(b, cellParams())
+        return r
+    }
+
+    private fun cellParams(): LinearLayout.LayoutParams {
+        val p = LinearLayout.LayoutParams(0, dp(120), 1f)
+        p.setMargins(dp(6), dp(6), dp(6), dp(6))
+        return p
+    }
+
+    // ---------- Список макросов ----------
+
+    private fun macrosView(): View {
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.setPadding(dp(10), dp(10), dp(10), dp(10))
+
+        val list = MacroStore.load(this)
+        if (list.isEmpty()) {
+            val empty = TextView(this)
+            empty.text = "Макросов пока нет. Нажмите «Добавить макрос» на главной или импортируйте файл."
+            empty.setTextColor(COLOR_MUTED)
+            empty.textSize = 15f
+            empty.setPadding(dp(10), dp(20), dp(10), 0)
+            col.addView(empty)
+        }
+        for (m in list) {
+            val p = LinearLayout.LayoutParams(MATCH, WRAP)
+            p.setMargins(dp(6), dp(6), dp(6), dp(6))
+            col.addView(macroCard(m, list), p)
+        }
+
+        val sv = ScrollView(this)
+        sv.addView(col)
+        return sv
+    }
+
+    private fun macroCard(m: Macro, list: MutableList<Macro>): View {
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.HORIZONTAL
+        card.gravity = Gravity.CENTER_VERTICAL
+        card.setPadding(dp(16), dp(12), dp(8), dp(12))
+        card.background = rounded(COLOR_CARD, 20)
+        card.setOnClickListener { macroMenu(m, list) }
+
+        val texts = LinearLayout(this)
+        texts.orientation = LinearLayout.VERTICAL
+
+        val title = TextView(this)
+        title.text = m.name
+        title.setTextColor(Color.WHITE)
+        title.textSize = 17f
+        title.typeface = Typeface.DEFAULT_BOLD
+        texts.addView(title)
+
+        val rep = if (m.repeat == 0) "∞" else m.repeat.toString()
+        val info = TextView(this)
+        info.text = "${m.steps.size} действий, повторов: $rep"
+        info.setTextColor(COLOR_MUTED)
+        info.textSize = 13f
+        texts.addView(info)
+
+        card.addView(texts, LinearLayout.LayoutParams(0, WRAP, 1f))
+
+        val play = TextView(this)
+        play.text = "▶"
+        play.textSize = 26f
+        play.setTextColor(Color.parseColor("#4CAF50"))
+        play.setPadding(dp(16), dp(10), dp(16), dp(10))
+        play.setOnClickListener { startMacro(m) }
+        card.addView(play)
+        return card
+    }
+
+    private fun macroMenu(m: Macro, list: MutableList<Macro>) {
+        val rep = if (m.repeat == 0) "∞" else m.repeat.toString()
+        val items = arrayOf("▶ Запустить", "🔁 Повторов: $rep", "✏️ Переименовать", "🗑 Удалить")
+        AlertDialog.Builder(this)
+            .setTitle(m.name)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> startMacro(m)
+                    1 -> askText("Повторов (0 = бесконечно)", m.repeat.toString(), true) { v ->
+                        m.repeat = v.trim().toIntOrNull()?.coerceAtLeast(0) ?: 1
+                        MacroStore.save(this, list)
+                        show(1)
+                    }
+                    2 -> askText("Название", m.name, false) { v ->
+                        if (v.isNotBlank()) {
+                            m.name = v.trim()
+                            MacroStore.save(this, list)
+                            show(1)
+                        }
+                    }
+                    3 -> confirmDelete(m, list)
+                }
+            }
+            .show()
+    }
+
+    private fun confirmDelete(m: Macro, list: MutableList<Macro>) {
+        AlertDialog.Builder(this)
+            .setTitle("Удалить «${m.name}»?")
+            .setPositiveButton("Удалить") { _, _ ->
+                list.removeAll { it.id == m.id }
+                MacroStore.save(this, list)
+                show(1)
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    // ---------- Запись и запуск ----------
+
+    private fun addMacro() {
+        val svc = ClickService.instance
+        if (svc == null) {
+            needService()
+            return
+        }
+        val defaultName = "Макрос ${MacroStore.load(this).size + 1}"
+        askText("Название макроса", defaultName, false) { name ->
+            svc.startRecording(name.ifBlank { defaultName }.trim())
+            Toast.makeText(
+                this,
+                "Запись идёт: делайте нажатия, затем «Стоп и сохранить» сверху",
+                Toast.LENGTH_LONG
+            ).show()
+            moveTaskToBack(true)
+        }
+    }
+
+    private fun startMacro(m: Macro) {
+        val svc = ClickService.instance
+        if (svc == null) {
+            needService()
+            return
+        }
+        svc.play(m)
+        moveTaskToBack(true)
+    }
+
+    private fun needService() {
+        AlertDialog.Builder(this)
+            .setTitle("Сервис выключен")
+            .setMessage(
+                "Включите «ClickMacro» в Настройки → Специальные возможности. " +
+                    "Без него нельзя записывать и выполнять нажатия."
+            )
+            .setPositiveButton("Открыть настройки") { _, _ -> openAccessibility() }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun openAccessibility() {
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    // ---------- Экспорт и импорт ----------
+
+    private fun exportMacros() {
+        val list = MacroStore.load(this)
+        if (list.isEmpty()) {
+            toast("Пока нечего экспортировать")
+            return
+        }
+        pickMacros("Что экспортировать?", "Сохранить файл", list) { chosen ->
+            pendingExport = chosen
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.type = "application/json"
+            intent.putExtra(Intent.EXTRA_TITLE, "clickmacro-macros.json")
+            startActivityForResult(intent, REQ_EXPORT)
+        }
+    }
+
+    private fun importMacros() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+        intent.type = "*/*"
+        startActivityForResult(intent, REQ_IMPORT)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        when (requestCode) {
+            REQ_EXPORT -> writeExport(uri)
+            REQ_IMPORT -> readImport(uri)
+        }
+    }
+
+    private fun writeExport(uri: Uri) {
+        try {
+            val json = MacroStore.toJson(pendingExport)
+            contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+            toast("Экспортировано макросов: ${pendingExport.size}")
+        } catch (e: Exception) {
+            toast("Не удалось сохранить файл")
+        }
+    }
+
+    private fun readImport(uri: Uri) {
+        val found: List<Macro> = try {
+            val text = contentResolver.openInputStream(uri)?.use {
+                it.readBytes().toString(Charsets.UTF_8)
+            } ?: ""
+            MacroStore.fromJson(text)
+        } catch (e: Exception) {
+            emptyList()
+        }
+        if (found.isEmpty()) {
+            toast("В файле нет макросов ClickMacro")
+            return
+        }
+        pickMacros("Что импортировать?", "Импортировать", found) { chosen ->
+            val all = MacroStore.load(this)
+            var nextId = System.currentTimeMillis()
+            for (m in chosen) {
+                all.add(m.copy(id = nextId))
+                nextId++
+            }
+            MacroStore.save(this, all)
+            toast("Импортировано макросов: ${chosen.size}")
+            show(1)
+        }
+    }
+
+    // Диалог с галочками: все макросы выбраны, лишние можно снять
+    private fun pickMacros(
+        title: String,
+        positive: String,
+        items: List<Macro>,
+        onOk: (List<Macro>) -> Unit
+    ) {
+        val names = Array(items.size) { i -> "${items[i].name} (${items[i].steps.size} действий)" }
+        val checked = BooleanArray(items.size) { true }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMultiChoiceItems(names, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton(positive) { _, _ ->
+                val chosen = items.filterIndexed { i, _ -> checked[i] }
+                if (chosen.isEmpty()) toast("Ничего не выбрано") else onOk(chosen)
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    // ---------- Мелочи ----------
+
+    private fun askText(title: String, initial: String, numeric: Boolean, onOk: (String) -> Unit) {
+        val input = EditText(this)
+        input.setText(initial)
+        input.setSelection(input.text.length)
+        if (numeric) input.inputType = InputType.TYPE_CLASS_NUMBER
+
+        val box = FrameLayout(this)
+        box.setPadding(dp(20), dp(8), dp(20), 0)
+        box.addView(input)
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("OK") { _, _ -> onOk(input.text.toString()) }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
+        val d = GradientDrawable()
+        d.setColor(color)
+        d.cornerRadius = dp(radiusDp).toFloat()
+        return d
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+}
