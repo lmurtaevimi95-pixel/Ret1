@@ -11,7 +11,7 @@ data class Step(
     val x2: Float,
     val y2: Float,
     val duration: Long, // сколько длится жест, мс
-    val delay: Long     // пауза перед жестом, мс
+    var delay: Long     // пауза перед жестом, мс
 )
 
 // repeat: сколько раз повторить макрос, 0 = бесконечно
