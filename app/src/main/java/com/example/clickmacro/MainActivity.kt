@@ -158,7 +158,7 @@ class MainActivity : Activity() {
 
         val hint = TextView(this)
         hint.text = "1. Включите сервис ClickMacro в специальных возможностях.\n" +
-            "2. Нажмите «Добавить макрос», выполните нажатия и нажмите «Стоп и сохранить».\n" +
+            "2. Нажмите «Добавить макрос», откройте нужное приложение и нажмите плавающую кнопку «Запись». Затем делайте нажатия и в конце нажмите «Стоп и сохранить».\n" +
             "3. Запускайте макрос из списка кнопкой ▶.\n" +
             "4. Нажмите на макрос, чтобы изменить повторы и паузы."
         hint.setTextColor(COLOR_MUTED)
@@ -386,10 +386,10 @@ class MainActivity : Activity() {
         }
         val defaultName = "Макрос ${MacroStore.load(this).size + 1}"
         askText("Название макроса", defaultName, false) { name ->
-            svc.startRecording(name.ifBlank { defaultName }.trim())
+            svc.showRecordButton(name.ifBlank { defaultName }.trim())
             Toast.makeText(
                 this,
-                "Запись идёт: делайте нажатия, затем «Стоп и сохранить» сверху",
+                "Откройте нужное приложение и нажмите плавающую кнопку «Запись»",
                 Toast.LENGTH_LONG
             ).show()
             moveTaskToBack(true)
