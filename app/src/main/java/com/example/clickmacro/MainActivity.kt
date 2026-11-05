@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private lateinit var navMacros: TextView
     private var tab = 0
     private var pendingExport: List<Macro> = emptyList()
+    private val floatUi by lazy { FloatUi(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,6 +147,12 @@ class MainActivity : Activity() {
             tileRow(
                 tile("⚙️", "Включить сервис", "#E07B2A") { openAccessibility() },
                 tile("⏹", "Остановить макрос", "#D64545") { ClickService.instance?.stopPlayback() }
+            )
+        )
+        col.addView(
+            tileRow(
+                tile("🎈", "Плавающие кнопки", "#B7791F") { floatUi.choose() },
+                tile("🎨", "Вид кнопки", "#5B5BD6") { floatUi.pickForLook() }
             )
         )
 
@@ -273,7 +280,8 @@ class MainActivity : Activity() {
             "⏱ Пауза для всех действий",
             "📝 Пауза по действиям",
             "✏️ Переименовать",
-            "🗑 Удалить"
+            "🗑 Удалить",
+            "🎈 Плавающая кнопка"
         )
         AlertDialog.Builder(this)
             .setTitle(m.name)
@@ -295,6 +303,7 @@ class MainActivity : Activity() {
                         }
                     }
                     5 -> confirmDelete(m, list)
+                    6 -> floatUi.settings(m.id)
                 }
             }
             .show()
@@ -306,6 +315,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Удалить") { _, _ ->
                 list.removeAll { it.id == m.id }
                 MacroStore.save(this, list)
+                ClickService.instance?.refreshFloating()
                 show(1)
             }
             .setNegativeButton("Отмена", null)
@@ -444,6 +454,7 @@ class MainActivity : Activity() {
         when (requestCode) {
             REQ_EXPORT -> writeExport(uri)
             REQ_IMPORT -> readImport(uri)
+            FloatUi.REQ_IMAGE -> floatUi.onImagePicked(uri)
         }
     }
 
