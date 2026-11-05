@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ClickMacro</string>
+    <string name="accessibility_desc">ClickMacro записывает ваши нажатия на экран и воспроизводит их по кнопке. Данные хранятся только на устройстве.</string>
+</resources>
