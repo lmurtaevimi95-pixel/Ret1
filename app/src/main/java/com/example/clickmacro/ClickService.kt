@@ -61,6 +61,7 @@ class ClickService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
+        removeRecordButton()
         stopEverything()
         floating.removeAll()
         instance = null
@@ -70,6 +71,111 @@ class ClickService : AccessibilityService() {
     // Обновить плавающие кнопки после изменения настроек
     fun refreshFloating() {
         floating.refresh()
+    }
+
+    // ---------- Плавающая кнопка «Запись» ----------
+
+    private var recordButton: View? = null
+
+    // Показывает плавающую кнопку. Нажатие: кнопка пропадает и начинается запись. Крестик отменяет.
+    fun showRecordButton(name: String) {
+        if (recording || playing) return
+        removeRecordButton()
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val bg = GradientDrawable()
+        bg.setColor(Color.parseColor("#D64545"))
+        bg.cornerRadius = 90f
+        row.background = bg
+
+        val start = TextView(this)
+        start.text = "● Запись"
+        start.setTextColor(Color.WHITE)
+        start.textSize = 16f
+        start.setPadding(48, 28, 24, 28)
+        row.addView(start)
+
+        val cancel = TextView(this)
+        cancel.text = "✕"
+        cancel.setTextColor(Color.WHITE)
+        cancel.textSize = 16f
+        cancel.setPadding(24, 28, 48, 28)
+        row.addView(cancel)
+
+        val lp = WindowManager.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        )
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.x = 40
+        lp.y = 300
+
+        val slop = 8 * resources.displayMetrics.density
+        var startX = 0
+        var startY = 0
+        var touchX = 0f
+        var touchY = 0f
+        var moved = false
+        row.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = lp.x
+                    startY = lp.y
+                    touchX = e.rawX
+                    touchY = e.rawY
+                    moved = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - touchX
+                    val dy = e.rawY - touchY
+                    if (!moved && (Math.abs(dx) > slop || Math.abs(dy) > slop)) moved = true
+                    if (moved) {
+                        lp.x = startX + dx.toInt()
+                        lp.y = startY + dy.toInt()
+                        try {
+                            windowManager?.updateViewLayout(row, lp)
+                        } catch (ex: Exception) {
+                            // окно уже убрано
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!moved) {
+                        removeRecordButton()
+                        if (e.x > start.width) {
+                            toast("Запись отменена")
+                        } else {
+                            // небольшая пауза, чтобы само нажатие на кнопку не попало в запись
+                            handler.postDelayed({ startRecording(name) }, 300)
+                        }
+                    }
+                }
+            }
+            true
+        }
+
+        try {
+            windowManager?.addView(row, lp)
+            recordButton = row
+        } catch (e: Exception) {
+            toast("Не удалось показать кнопку записи")
+        }
+    }
+
+    private fun removeRecordButton() {
+        val v = recordButton ?: return
+        try {
+            windowManager?.removeView(v)
+        } catch (e: Exception) {
+            // уже убрана
+        }
+        recordButton = null
     }
 
     // ---------- Запись ----------
