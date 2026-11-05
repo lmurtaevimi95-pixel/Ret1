@@ -15,11 +15,18 @@ data class Step(
 )
 
 // repeat: сколько раз повторить макрос, 0 = бесконечно
+// float*: настройки плавающей кнопки (размер в dp, видимость в %, картинка, позиция в px)
 data class Macro(
     val id: Long,
     var name: String,
     var repeat: Int,
-    val steps: List<Step>
+    val steps: List<Step>,
+    var floatOn: Boolean = false,
+    var floatSize: Int = 56,
+    var floatAlpha: Int = 90,
+    var floatImage: String = "",
+    var floatX: Int = 40,
+    var floatY: Int = 400
 )
 
 object MacroStore {
@@ -29,7 +36,7 @@ object MacroStore {
     fun load(ctx: Context): MutableList<Macro> {
         val raw = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY, "[]") ?: "[]"
-        return fromJson(raw).toMutableList()
+        return fromJson(raw, true).toMutableList()
     }
 
     fun save(ctx: Context, list: List<Macro>) {
@@ -61,13 +68,19 @@ object MacroStore {
                     .put("name", m.name)
                     .put("repeat", m.repeat)
                     .put("steps", steps)
+                    .put("floatOn", m.floatOn)
+                    .put("floatSize", m.floatSize)
+                    .put("floatAlpha", m.floatAlpha)
+                    .put("floatImage", m.floatImage)
+                    .put("floatX", m.floatX)
+                    .put("floatY", m.floatY)
             )
         }
         return arr.toString()
     }
 
-    // Используется и при загрузке, и при импорте из файла (файлу не доверяем: ограничиваем время жестов)
-    fun fromJson(raw: String): List<Macro> {
+    // withFloat = true только для своего хранилища. При импорте из файла настройки кнопки не берём.
+    fun fromJson(raw: String, withFloat: Boolean = false): List<Macro> {
         val result = mutableListOf<Macro>()
         try {
             val arr = JSONArray(raw)
@@ -89,14 +102,21 @@ object MacroStore {
                     )
                 }
                 if (steps.isNotEmpty()) {
-                    result.add(
-                        Macro(
-                            o.optLong("id", System.currentTimeMillis() + i),
-                            o.getString("name"),
-                            o.optInt("repeat", 1).coerceAtLeast(0),
-                            steps
-                        )
+                    val m = Macro(
+                        o.optLong("id", System.currentTimeMillis() + i),
+                        o.getString("name"),
+                        o.optInt("repeat", 1).coerceAtLeast(0),
+                        steps
                     )
+                    if (withFloat) {
+                        m.floatOn = o.optBoolean("floatOn", false)
+                        m.floatSize = o.optInt("floatSize", 56).coerceIn(30, 200)
+                        m.floatAlpha = o.optInt("floatAlpha", 90).coerceIn(10, 100)
+                        m.floatImage = o.optString("floatImage", "")
+                        m.floatX = o.optInt("floatX", 40)
+                        m.floatY = o.optInt("floatY", 400)
+                    }
+                    result.add(m)
                 }
             }
         } catch (e: Exception) {
