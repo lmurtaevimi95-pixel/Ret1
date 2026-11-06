@@ -327,7 +327,7 @@ class MainActivity : Activity() {
     // Пауза в секундах -> миллисекунды в диапазоне 0.100–1.000
     private fun parseDelayMs(text: String): Long? {
         val v = text.trim().replace(',', '.').toDoubleOrNull() ?: return null
-        return Math.round(v * 1000.0).coerceIn(100L, 1000L)
+        return Math.round(v * 1000.0).coerceIn(10L, 1000L)
     }
 
     private fun fmtSec(ms: Long): String = String.format(Locale.US, "%.3f", ms / 1000.0)
