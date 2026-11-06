@@ -160,7 +160,7 @@ class MainActivity : Activity() {
         hint.text = "1. Включите сервис ClickMacro в специальных возможностях.\n" +
             "2. Нажмите «Добавить макрос», откройте нужное приложение и нажмите плавающую кнопку «Запись». Затем делайте нажатия и в конце нажмите «Стоп и сохранить».\n" +
             "3. Запускайте макрос из списка кнопкой ▶.\n" +
-            "4. Нажмите на макрос, чтобы изменить повторы и паузы."
+            "4. Нажмите на макрос, чтобы изменить повторы, паузы и задержку старта."
         hint.setTextColor(COLOR_MUTED)
         hint.textSize = 14f
         hint.setPadding(dp(10), dp(16), dp(10), 0)
@@ -281,7 +281,8 @@ class MainActivity : Activity() {
             "📝 Пауза по действиям",
             "✏️ Переименовать",
             "🗑 Удалить",
-            "🎈 Плавающая кнопка"
+            "🎈 Плавающая кнопка",
+            "⏳ Задержка старта: ${fmtSec(m.startDelay)} с"
         )
         AlertDialog.Builder(this)
             .setTitle(m.name)
@@ -304,6 +305,7 @@ class MainActivity : Activity() {
                     }
                     5 -> confirmDelete(m, list)
                     6 -> floatUi.settings(m.id)
+                    7 -> setStartDelay(m, list)
                 }
             }
             .show()
@@ -322,9 +324,26 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // ---------- Задержка старта ----------
+
+    // Задержка перед стартом макроса: 0.010–2.000 с
+    private fun setStartDelay(m: Macro, list: MutableList<Macro>) {
+        askText("Задержка старта, сек (0.010–2.000)", fmtSec(m.startDelay), true, true) { v ->
+            val x = v.trim().replace(',', '.').toDoubleOrNull()
+            if (x == null) {
+                toast("Введите число, например 0.500")
+            } else {
+                m.startDelay = Math.round(x * 1000.0).coerceIn(10L, 2000L)
+                MacroStore.save(this, list)
+                toast("Задержка старта: ${fmtSec(m.startDelay)} с")
+                show(1)
+            }
+        }
+    }
+
     // ---------- Паузы между действиями ----------
 
-    // Пауза в секундах -> миллисекунды в диапазоне 0.100–1.000
+    // Пауза в секундах -> миллисекунды в диапазоне 0.010–1.000
     private fun parseDelayMs(text: String): Long? {
         val v = text.trim().replace(',', '.').toDoubleOrNull() ?: return null
         return Math.round(v * 1000.0).coerceIn(10L, 1000L)
@@ -333,7 +352,7 @@ class MainActivity : Activity() {
     private fun fmtSec(ms: Long): String = String.format(Locale.US, "%.3f", ms / 1000.0)
 
     private fun setAllDelays(m: Macro, list: MutableList<Macro>) {
-        askText("Пауза между всеми действиями, сек (0.100–1.000)", "0.300", true, true) { v ->
+        askText("Пауза между всеми действиями, сек (0.010–1.000)", "0.300", true, true) { v ->
             val ms = parseDelayMs(v)
             if (ms == null) {
                 toast("Введите число, например 0.250")
@@ -357,8 +376,8 @@ class MainActivity : Activity() {
             .setItems(items) { _, i ->
                 val step = m.steps[i]
                 askText(
-                    "Пауза перед действием ${i + 1}, сек (0.100–1.000)",
-                    fmtSec(step.delay.coerceIn(100L, 1000L)),
+                    "Пауза перед действием ${i + 1}, сек (0.010–1.000)",
+                    fmtSec(step.delay.coerceIn(10L, 1000L)),
                     true,
                     true
                 ) { v ->
