@@ -15,6 +15,7 @@ data class Step(
 )
 
 // repeat: сколько раз повторить макрос, 0 = бесконечно
+// startDelay: задержка перед стартом макроса, мс (10–2000)
 // float*: настройки плавающей кнопки (размер в dp, видимость в %, картинка, позиция в px)
 data class Macro(
     val id: Long,
@@ -26,7 +27,8 @@ data class Macro(
     var floatAlpha: Int = 90,
     var floatImage: String = "",
     var floatX: Int = 40,
-    var floatY: Int = 400
+    var floatY: Int = 400,
+    var startDelay: Long = 100L
 )
 
 object MacroStore {
@@ -68,6 +70,7 @@ object MacroStore {
                     .put("name", m.name)
                     .put("repeat", m.repeat)
                     .put("steps", steps)
+                    .put("startDelay", m.startDelay)
                     .put("floatOn", m.floatOn)
                     .put("floatSize", m.floatSize)
                     .put("floatAlpha", m.floatAlpha)
@@ -108,6 +111,7 @@ object MacroStore {
                         o.optInt("repeat", 1).coerceAtLeast(0),
                         steps
                     )
+                    m.startDelay = o.optLong("startDelay", 100L).coerceIn(10L, 2000L)
                     if (withFloat) {
                         m.floatOn = o.optBoolean("floatOn", false)
                         m.floatSize = o.optInt("floatSize", 56).coerceIn(30, 200)
