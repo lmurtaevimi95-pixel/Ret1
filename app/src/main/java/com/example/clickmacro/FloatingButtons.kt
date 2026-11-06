@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import java.io.File
 import kotlin.math.abs
 
@@ -174,7 +175,8 @@ class FloatingButtons(private val service: ClickService) {
         }
     }
 
-    // Перетаскивание пальцем; короткое нажатие запускает макрос
+    // Перетаскивание пальцем; короткое нажатие запускает макрос;
+    // долгое (около секунды) убирает кнопку с экрана
     private fun attachTouch(h: Holder, id: Long) {
         val slop = 8 * service.resources.displayMetrics.density
         var startX = 0
@@ -182,6 +184,11 @@ class FloatingButtons(private val service: ClickService) {
         var downX = 0f
         var downY = 0f
         var moved = false
+        var longPressed = false
+        val longPress = Runnable {
+            longPressed = true
+            hideButton(id)
+        }
         h.root.setOnTouchListener { _, e ->
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -190,11 +197,16 @@ class FloatingButtons(private val service: ClickService) {
                     downX = e.rawX
                     downY = e.rawY
                     moved = false
+                    longPressed = false
+                    h.root.postDelayed(longPress, 800)
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX
                     val dy = e.rawY - downY
-                    if (!moved && (abs(dx) > slop || abs(dy) > slop)) moved = true
+                    if (!moved && (abs(dx) > slop || abs(dy) > slop)) {
+                        moved = true
+                        h.root.removeCallbacks(longPress)
+                    }
                     if (moved) {
                         h.params.x = startX + dx.toInt()
                         h.params.y = startY + dy.toInt()
@@ -206,11 +218,33 @@ class FloatingButtons(private val service: ClickService) {
                     }
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (moved) savePosition(id, h.params.x, h.params.y) else onTap(id)
+                    h.root.removeCallbacks(longPress)
+                    if (!longPressed) {
+                        if (moved) savePosition(id, h.params.x, h.params.y) else onTap(id)
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    h.root.removeCallbacks(longPress)
                 }
             }
             true
         }
+    }
+
+    // Убрать кнопку с экрана. Макрос остаётся в списке, кнопку можно вернуть в приложении.
+    private fun hideButton(id: Long) {
+        val list = MacroStore.load(service)
+        val m = list.firstOrNull { it.id == id }
+        if (m != null) {
+            m.floatOn = false
+            MacroStore.save(service, list)
+        }
+        remove(id)
+        Toast.makeText(
+            service,
+            "Кнопка убрана. Вернуть: «Плавающие кнопки» в приложении",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun onTap(id: Long) {
