@@ -76,7 +76,7 @@ class MainActivity : Activity() {
         h.setPadding(dp(20), dp(16), dp(20), dp(16))
 
         val title = TextView(this)
-        title.text = "ClickMacro"
+        title.text = "MBmacro"
         title.setTextColor(Color.WHITE)
         title.textSize = 22f
         title.typeface = Typeface.DEFAULT_BOLD
@@ -143,12 +143,6 @@ class MainActivity : Activity() {
                 tile("📥", "Импорт", "#2A8CA8") { importMacros() }
             )
         )
-                col.addView(
-            tileRow(
-                tile("⚙️", "Включить сервис", "#E07B2A") { openAccessibility() },
-                tile("⏹", "Остановить макрос", "#D64545") { ClickService.instance?.stopPlayback() }
-            )
-        )
         col.addView(
             tileRow(
                 tile("🎈", "Плавающие кнопки", "#B7791F") { floatUi.choose() },
@@ -157,7 +151,7 @@ class MainActivity : Activity() {
         )
 
         val hint = TextView(this)
-        hint.text = "1. Включите сервис ClickMacro в специальных возможностях.\n" +
+        hint.text = "1. Включите сервис MBmacro в специальных возможностях.\n" +
             "2. Нажмите «Добавить макрос», откройте нужное приложение и нажмите плавающую кнопку «Запись». Затем делайте нажатия и в конце нажмите «Стоп и сохранить».\n" +
             "3. Запускайте макрос из списка кнопкой ▶.\n" +
             "4. Нажмите на макрос, чтобы изменить повторы, паузы, время нажатия и задержку старта."
@@ -453,7 +447,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Сервис выключен")
             .setMessage(
-                "Включите «ClickMacro» в Настройки → Специальные возможности. " +
+                "Включите «MBmacro» в Настройки → Специальные возможности. " +
                     "Без него нельзя записывать и выполнять нажатия."
             )
             .setPositiveButton("Открыть настройки") { _, _ -> openAccessibility() }
@@ -478,7 +472,7 @@ class MainActivity : Activity() {
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.type = "application/json"
-            intent.putExtra(Intent.EXTRA_TITLE, "clickmacro-macros.json")
+            intent.putExtra(Intent.EXTRA_TITLE, "mbmacro-macros.json")
             startActivityForResult(intent, REQ_EXPORT)
         }
     }
@@ -521,7 +515,7 @@ class MainActivity : Activity() {
             emptyList()
         }
         if (found.isEmpty()) {
-            toast("В файле нет макросов ClickMacro")
+            toast("В файле нет макросов")
             return
         }
         pickMacros("Что импортировать?", "Импортировать", found) { chosen ->
@@ -570,4 +564,10 @@ class MainActivity : Activity() {
     ) {
         val input = EditText(this)
         input.setText(initial)
- 
+        input.setSelection(input.text.length)
+        if (numeric) {
+            input.inputType = if (decimal) {
+                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            } else {
+                InputType.TYPE_CLASS_NUMBER
+           
