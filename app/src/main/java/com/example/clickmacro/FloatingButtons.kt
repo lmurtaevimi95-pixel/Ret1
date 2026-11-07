@@ -18,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.hypot
 
 // Плавающие кнопки макросов: рисуются поверх всех приложений через сервис специальных возможностей
 class FloatingButtons(private val service: ClickService) {
@@ -34,6 +35,10 @@ class FloatingButtons(private val service: ClickService) {
     private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val holders = mutableMapOf<Long, Holder>()
     private var touchable = true
+
+    // корзина, которая появляется, пока кнопку тянут
+    private var trash: TextView? = null
+    private var overTrash = false
 
     // Показать выбранные кнопки, убрать лишние, применить новый вид
     fun refresh() {
@@ -58,6 +63,7 @@ class FloatingButtons(private val service: ClickService) {
     }
 
     fun removeAll() {
+        removeTrash()
         for (id in holders.keys.toList()) remove(id)
     }
 
@@ -176,7 +182,8 @@ class FloatingButtons(private val service: ClickService) {
     }
 
     // Перетаскивание пальцем; короткое нажатие запускает макрос;
-    // долгое (около секунды) убирает кнопку с экрана
+    // долгое (около секунды) убирает кнопку с экрана;
+    // если отпустить кнопку над корзиной, она тоже уберётся
     private fun attachTouch(h: Holder, id: Long) {
         val slop = 8 * service.resources.displayMetrics.density
         var startX = 0
@@ -206,6 +213,7 @@ class FloatingButtons(private val service: ClickService) {
                     if (!moved && (abs(dx) > slop || abs(dy) > slop)) {
                         moved = true
                         h.root.removeCallbacks(longPress)
+                        showTrash()
                     }
                     if (moved) {
                         h.params.x = startX + dx.toInt()
@@ -215,20 +223,101 @@ class FloatingButtons(private val service: ClickService) {
                         } catch (ex: Exception) {
                             // окно уже убрано
                         }
+                        updateTrash(e.rawX, e.rawY)
                     }
                 }
                 MotionEvent.ACTION_UP -> {
                     h.root.removeCallbacks(longPress)
                     if (!longPressed) {
-                        if (moved) savePosition(id, h.params.x, h.params.y) else onTap(id)
+                        if (moved) {
+                            val drop = overTrash
+                            removeTrash()
+                            if (drop) {
+                                hideButton(id)
+                            } else {
+                                savePosition(id, h.params.x, h.params.y)
+                            }
+                        } else {
+                            onTap(id)
+                        }
                     }
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     h.root.removeCallbacks(longPress)
+                    removeTrash()
                 }
             }
             true
         }
+    }
+
+    // ---------- Корзина ----------
+
+    private fun trashBackground(active: Boolean): GradientDrawable {
+        val bg = GradientDrawable()
+        bg.shape = GradientDrawable.OVAL
+        bg.setColor(Color.parseColor(if (active) "#FF3B3B" else "#CC3A3A3A"))
+        return bg
+    }
+
+    // Круглая корзина внизу по центру экрана. Касания она не перехватывает.
+    private fun showTrash() {
+        if (trash != null) return
+        val density = service.resources.displayMetrics.density
+        val size = (72 * density).toInt()
+
+        val t = TextView(service)
+        t.text = "🗑"
+        t.textSize = 30f
+        t.gravity = Gravity.CENTER
+        t.setTextColor(Color.WHITE)
+        t.background = trashBackground(false)
+
+        val lp = WindowManager.LayoutParams(
+            size,
+            size,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        )
+        lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        lp.y = (64 * density).toInt()
+        try {
+            windowManager.addView(t, lp)
+            trash = t
+            overTrash = false
+        } catch (e: Exception) {
+            // не удалось показать корзину
+        }
+    }
+
+    // Над корзиной ли палец; корзина краснеет, когда да
+    private fun updateTrash(rawX: Float, rawY: Float) {
+        val t = trash ?: return
+        if (t.width == 0) return
+        val loc = IntArray(2)
+        t.getLocationOnScreen(loc)
+        val cx = loc[0] + t.width / 2f
+        val cy = loc[1] + t.height / 2f
+        val over = hypot(rawX - cx, rawY - cy) < t.width * 0.9f
+        if (over != overTrash) {
+            overTrash = over
+            t.background = trashBackground(over)
+            t.textSize = if (over) 38f else 30f
+        }
+    }
+
+    private fun removeTrash() {
+        val t = trash ?: return
+        try {
+            windowManager.removeView(t)
+        } catch (e: Exception) {
+            // уже убрана
+        }
+        trash = null
+        overTrash = false
     }
 
     // Убрать кнопку с экрана. Макрос остаётся в списке, кнопку можно вернуть в приложении.
