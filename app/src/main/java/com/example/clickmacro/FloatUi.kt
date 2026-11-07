@@ -37,7 +37,7 @@ class FloatUi(private val activity: Activity) {
     // Список макросов с галочками: какие показывать на экране
     fun choose() {
         if (ClickService.instance == null) {
-            toast("Сначала включите сервис ClickMacro в специальных возможностях")
+            toast("Сначала включите сервис MBmacro в специальных возможностях")
             return
         }
         val list = MacroStore.load(activity)
@@ -100,7 +100,7 @@ class FloatUi(private val activity: Activity) {
         show.isChecked = m.floatOn
         show.setOnCheckedChangeListener { _, checked ->
             if (checked && ClickService.instance == null) {
-                toast("Сначала включите сервис ClickMacro в специальных возможностях")
+                toast("Сначала включите сервис MBmacro в специальных возможностях")
             }
             m.floatOn = checked
             commit(list)
