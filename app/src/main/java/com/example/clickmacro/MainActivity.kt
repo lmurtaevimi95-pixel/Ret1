@@ -143,7 +143,7 @@ class MainActivity : Activity() {
                 tile("📥", "Импорт", "#2A8CA8") { importMacros() }
             )
         )
-        col.addView(
+                col.addView(
             tileRow(
                 tile("⚙️", "Включить сервис", "#E07B2A") { openAccessibility() },
                 tile("⏹", "Остановить макрос", "#D64545") { ClickService.instance?.stopPlayback() }
