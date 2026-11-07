@@ -570,4 +570,31 @@ class MainActivity : Activity() {
                 InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
             } else {
                 InputType.TYPE_CLASS_NUMBER
-           
+            }
+        }
+
+        val box = FrameLayout(this)
+        box.setPadding(dp(20), dp(8), dp(20), 0)
+        box.addView(input)
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("OK") { _, _ -> onOk(input.text.toString()) }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
+        val d = GradientDrawable()
+        d.setColor(color)
+        d.cornerRadius = dp(radiusDp).toFloat()
+        return d
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+}
