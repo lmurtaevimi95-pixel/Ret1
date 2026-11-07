@@ -160,7 +160,7 @@ class MainActivity : Activity() {
         hint.text = "1. Включите сервис ClickMacro в специальных возможностях.\n" +
             "2. Нажмите «Добавить макрос», откройте нужное приложение и нажмите плавающую кнопку «Запись». Затем делайте нажатия и в конце нажмите «Стоп и сохранить».\n" +
             "3. Запускайте макрос из списка кнопкой ▶.\n" +
-            "4. Нажмите на макрос, чтобы изменить повторы, паузы и задержку старта."
+            "4. Нажмите на макрос, чтобы изменить повторы, паузы, время нажатия и задержку старта."
         hint.setTextColor(COLOR_MUTED)
         hint.textSize = 14f
         hint.setPadding(dp(10), dp(16), dp(10), 0)
@@ -282,7 +282,8 @@ class MainActivity : Activity() {
             "✏️ Переименовать",
             "🗑 Удалить",
             "🎈 Плавающая кнопка",
-            "⏳ Задержка старта: ${fmtSec(m.startDelay)} с"
+            "⏳ Задержка старта: ${fmtSec(m.startDelay)} с",
+            "👆 Время нажатия"
         )
         AlertDialog.Builder(this)
             .setTitle(m.name)
@@ -306,6 +307,7 @@ class MainActivity : Activity() {
                     5 -> confirmDelete(m, list)
                     6 -> floatUi.settings(m.id)
                     7 -> setStartDelay(m, list)
+                    8 -> setTapDurations(m, list)
                 }
             }
             .show()
@@ -326,14 +328,14 @@ class MainActivity : Activity() {
 
     // ---------- Задержка старта ----------
 
-    // Задержка перед стартом макроса: 0.010–2.000 с
+    // Задержка перед стартом макроса: 0.001–2.000 с
     private fun setStartDelay(m: Macro, list: MutableList<Macro>) {
-        askText("Задержка старта, сек (0.010–2.000)", fmtSec(m.startDelay), true, true) { v ->
+        askText("Задержка старта, сек (0.001–2.000)", fmtSec(m.startDelay), true, true) { v ->
             val x = v.trim().replace(',', '.').toDoubleOrNull()
             if (x == null) {
                 toast("Введите число, например 0.500")
             } else {
-                m.startDelay = Math.round(x * 1000.0).coerceIn(10L, 2000L)
+                m.startDelay = Math.round(x * 1000.0).coerceIn(1L, 2000L)
                 MacroStore.save(this, list)
                 toast("Задержка старта: ${fmtSec(m.startDelay)} с")
                 show(1)
@@ -341,18 +343,40 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------- Время нажатия ----------
+
+    // Сколько палец «держится» на экране при каждом нажатии (свайпы не меняются): 0.001–1.000 с
+    private fun setTapDurations(m: Macro, list: MutableList<Macro>) {
+        val first = m.steps.firstOrNull { it.x1 == it.x2 && it.y1 == it.y2 }
+        val initial = fmtSec(first?.duration ?: 30L)
+        askText("Время нажатия, сек (0.001–1.000)", initial, true, true) { v ->
+            val x = v.trim().replace(',', '.').toDoubleOrNull()
+            if (x == null) {
+                toast("Введите число, например 0.020")
+            } else {
+                val ms = Math.round(x * 1000.0).coerceIn(1L, 1000L)
+                for (s in m.steps) {
+                    if (s.x1 == s.x2 && s.y1 == s.y2) s.duration = ms
+                }
+                MacroStore.save(this, list)
+                toast("Время нажатия: ${fmtSec(ms)} с")
+                show(1)
+            }
+        }
+    }
+
     // ---------- Паузы между действиями ----------
 
-    // Пауза в секундах -> миллисекунды в диапазоне 0.010–1.000
+    // Пауза в секундах -> миллисекунды в диапазоне 0.001–1.000
     private fun parseDelayMs(text: String): Long? {
         val v = text.trim().replace(',', '.').toDoubleOrNull() ?: return null
-        return Math.round(v * 1000.0).coerceIn(10L, 1000L)
+        return Math.round(v * 1000.0).coerceIn(1L, 1000L)
     }
 
     private fun fmtSec(ms: Long): String = String.format(Locale.US, "%.3f", ms / 1000.0)
 
     private fun setAllDelays(m: Macro, list: MutableList<Macro>) {
-        askText("Пауза между всеми действиями, сек (0.010–1.000)", "0.300", true, true) { v ->
+        askText("Пауза между всеми действиями, сек (0.001–1.000)", "0.300", true, true) { v ->
             val ms = parseDelayMs(v)
             if (ms == null) {
                 toast("Введите число, например 0.250")
@@ -376,8 +400,8 @@ class MainActivity : Activity() {
             .setItems(items) { _, i ->
                 val step = m.steps[i]
                 askText(
-                    "Пауза перед действием ${i + 1}, сек (0.010–1.000)",
-                    fmtSec(step.delay.coerceIn(10L, 1000L)),
+                    "Пауза перед действием ${i + 1}, сек (0.001–1.000)",
+                    fmtSec(step.delay.coerceIn(1L, 1000L)),
                     true,
                     true
                 ) { v ->
@@ -546,37 +570,4 @@ class MainActivity : Activity() {
     ) {
         val input = EditText(this)
         input.setText(initial)
-        input.setSelection(input.text.length)
-        if (numeric) {
-            input.inputType = if (decimal) {
-                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            } else {
-                InputType.TYPE_CLASS_NUMBER
-            }
-        }
-
-        val box = FrameLayout(this)
-        box.setPadding(dp(20), dp(8), dp(20), 0)
-        box.addView(input)
-
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(box)
-            .setPositiveButton("OK") { _, _ -> onOk(input.text.toString()) }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    private fun rounded(color: Int, radiusDp: Int): GradientDrawable {
-        val d = GradientDrawable()
-        d.setColor(color)
-        d.cornerRadius = dp(radiusDp).toFloat()
-        return d
-    }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-
-    private fun toast(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-    }
-}
+ 
