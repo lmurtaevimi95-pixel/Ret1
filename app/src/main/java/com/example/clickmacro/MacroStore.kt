@@ -10,12 +10,12 @@ data class Step(
     val y1: Float,
     val x2: Float,
     val y2: Float,
-    val duration: Long, // сколько длится жест, мс
+    var duration: Long, // сколько длится жест, мс
     var delay: Long     // пауза перед жестом, мс
 )
 
 // repeat: сколько раз повторить макрос, 0 = бесконечно
-// startDelay: задержка перед стартом макроса, мс (10–2000)
+// startDelay: задержка перед стартом макроса, мс (1–2000)
 // float*: настройки плавающей кнопки (размер в dp, видимость в %, картинка, позиция в px)
 data class Macro(
     val id: Long,
@@ -111,7 +111,7 @@ object MacroStore {
                         o.optInt("repeat", 1).coerceAtLeast(0),
                         steps
                     )
-                    m.startDelay = o.optLong("startDelay", 100L).coerceIn(10L, 2000L)
+                    m.startDelay = o.optLong("startDelay", 100L).coerceIn(1L, 2000L)
                     if (withFloat) {
                         m.floatOn = o.optBoolean("floatOn", false)
                         m.floatSize = o.optInt("floatSize", 56).coerceIn(30, 200)
