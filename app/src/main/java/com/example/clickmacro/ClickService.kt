@@ -277,22 +277,66 @@ class ClickService : AccessibilityService() {
         handler.postDelayed({ runStep(macro, 0, 0, token) }, macro.startDelay)
     }
 
+    // Берёт до 10 действий и отправляет их одним жестом: паузы между ними выдерживаются точно
     private fun runStep(m: Macro, index: Int, round: Int, token: Int) {
         if (!playing || token != playToken) return
         if (index >= m.steps.size) {
-            val next = round + 1
-            if (m.repeat != 0 && next >= m.repeat) {
+            val nextRound = round + 1
+            if (m.repeat != 0 && nextRound >= m.repeat) {
                 finishPlayback("Макрос выполнен")
                 return
             }
-            handler.postDelayed({ runStep(m, 0, next, token) }, 500)
+            handler.postDelayed({ runStep(m, 0, nextRound, token) }, 500)
             return
         }
-        val step = m.steps[index]
+
+        val builder = GestureDescription.Builder()
+        var j = index
+        try {
+            val maxStrokes = GestureDescription.getMaxStrokeCount()
+            val maxTime = GestureDescription.getMaxGestureDuration()
+            var count = 0
+            var endTime = 0L
+            while (j < m.steps.size && count < maxStrokes) {
+                val s = m.steps[j]
+                val dur = s.duration.coerceAtLeast(1L)
+                val start = if (count == 0) 0L else endTime + maxOf(s.delay, 1L)
+                if (count > 0 && start + dur > maxTime) break
+                val path = Path()
+                path.moveTo(s.x1, s.y1)
+                if (s.x1 != s.x2 || s.y1 != s.y2) {
+                    path.lineTo(s.x2, s.y2)
+                }
+                builder.addStroke(GestureDescription.StrokeDescription(path, start, dur))
+                endTime = start + dur
+                count++
+                j++
+            }
+        } catch (e: Exception) {
+            finishPlayback("Не удалось выполнить макрос")
+            return
+        }
+
+        val nextIndex = j
+        // пауза перед первым действием группы (у самого первого действия макроса её нет)
+        val firstWait = if (index == 0 && round == 0) 0L else m.steps[index].delay
         handler.postDelayed({
             if (!playing || token != playToken) return@postDelayed
-            perform(step) { runStep(m, index + 1, round, token) }
-        }, if (index == 0 && round == 0) 0L else step.delay)
+            val ok = try {
+                dispatchGesture(builder.build(), object : AccessibilityService.GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        runStep(m, nextIndex, round, token)
+                    }
+
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        runStep(m, nextIndex, round, token)
+                    }
+                }, null)
+            } catch (e: Exception) {
+                false
+            }
+            if (!ok) runStep(m, nextIndex, round, token)
+        }, firstWait)
     }
 
     fun stopPlayback() {
@@ -334,6 +378,7 @@ class ClickService : AccessibilityService() {
 
     // ---------- Жесты и оверлей ----------
 
+    // Одиночный жест: нужен при записи, чтобы нажатие дошло до приложения под оверлеем
     private fun perform(step: Step, done: () -> Unit) {
         val path = Path()
         path.moveTo(step.x1, step.y1)
